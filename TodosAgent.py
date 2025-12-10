@@ -1,0 +1,58 @@
+﻿from langchain_openai import ChatOpenAI
+from langchain.agents import create_agent
+from langchain.tools import tool
+from dotenv import load_dotenv
+import os
+import requests
+
+BASE_URL = "https://se4458-nodejsrest-hucfdxa9dccbddcu.canadacentral-01.azurewebsites.net"
+
+# Load environment variables from .env if present
+load_dotenv()
+
+# Configure your OpenAI key via environment variable (recommended)
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+if OPENAI_API_KEY:
+    os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY
+else:
+    raise RuntimeError("Set OPENAI_API_KEY in your environment or .env file.")
+
+@tool
+def list_todos() -> str:
+    """Fetch all todos."""
+    resp = requests.get(f"{BASE_URL}/todos", timeout=10)
+    resp.raise_for_status()
+    return resp.text
+
+@tool
+def add_todo(title: str, description: str = "") -> str:
+    """Add a todo with title and optional description."""
+    payload = {"title": title, "description": description}
+    resp = requests.post(f"{BASE_URL}/todos", json=payload, timeout=10)
+    resp.raise_for_status()
+    return resp.text
+
+llm = ChatOpenAI(temperature=0, model="gpt-4")
+
+tools = [list_todos, add_todo]
+
+agent = create_agent(
+    model=llm,
+    tools=tools,
+    system_prompt="You manage a todo list via the provided REST API.",
+)
+
+
+def run_query(question: str) -> str:
+    """Send a user question to the agent and return the latest reply text."""
+    result = agent.invoke({"messages": [{"role": "user", "content": question}]})
+    last_message = result["messages"][-1]
+    return getattr(last_message, "content", str(last_message))
+
+
+if __name__ == "__main__":
+    while True:
+        user_input = input("Enter a todo request (blank to exit): ").strip()
+        if not user_input:
+            break
+        print(run_query(user_input))

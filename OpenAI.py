@@ -1,55 +1,53 @@
-from langchain.chat_models import ChatOpenAI
-from langchain.agents import initialize_agent, Tool
-from langchain.agents.agent_types import AgentType
+﻿from langchain_openai import ChatOpenAI
+from langchain.agents import create_agent
+from langchain.tools import tool
+from dotenv import load_dotenv
+import os
 import requests
 
 # Set your OpenAI key
-import os
-os.environ["OPENAI_API_KEY"] = "your-openai-api-key"
+load_dotenv()
 
-# Tool 1: Get weather
+# Configure your OpenAI key via environment variable (recommended)
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+if OPENAI_API_KEY:
+    os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY
+else:
+    raise RuntimeError("Set OPENAI_API_KEY in your environment or .env file.")
+
+@tool
 def get_weather(city: str) -> str:
-    # Replace with a real weather API if desired
-    return f"The weather in {city} is sunny with 25°C."
+    """Get the weather for a given city."""
+    return f"The weather in {city} is sunny with 25C."
 
-# Tool 2: Get news
+@tool
 def get_news() -> str:
+    """Get the latest news."""
     return "Top news: AI is revolutionizing everything."
 
-# Tool 3: Tell a joke
+@tool
 def tell_joke() -> str:
+    """Hear a random joke."""
     return "Why did the scarecrow win an award? Because he was outstanding in his field."
 
-# LangChain Tools
-tools = [
-    Tool(
-        name="GetWeather",
-        func=lambda city: get_weather(city),
-        description="Use this to get the weather for a given city. Input should be the city name."
-    ),
-    Tool(
-        name="GetNews",
-        func=lambda _: get_news(),
-        description="Use this to get the latest news. Input is ignored."
-    ),
-    Tool(
-        name="TellJoke",
-        func=lambda _: tell_joke(),
-        description="Use this to hear a random joke. Input is ignored."
-    )
-]
-
-# Initialize LangChain agent
 llm = ChatOpenAI(temperature=0, model="gpt-4")  # or "gpt-3.5-turbo" for cheaper runs
 
-agent = initialize_agent(
-    tools, 
-    llm, 
-    agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION,
-    verbose=True
+tools = [get_weather, get_news, tell_joke]
+
+agent = create_agent(
+    model=llm,
+    tools=tools,
+    system_prompt="You are a helpful assistant that can use tools when needed.",
 )
 
 # Example queries
-print(agent.run("What's the weather in Tokyo?"))
-print(agent.run("Tell me a joke"))
-print(agent.run("Give me the latest news"))
+def run_query(question: str) -> str:
+    """Send a user question to the agent and extract the latest reply text."""
+    result = agent.invoke({"messages": [{"role": "user", "content": question}]})
+    last_message = result["messages"][-1]
+    return getattr(last_message, "content", str(last_message))
+
+
+print(run_query("What's the weather in Tokyo?"))
+print(run_query("Tell me a joke"))
+print(run_query("Give me the latest news"))
